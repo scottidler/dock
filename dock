@@ -1,99 +1,70 @@
-#!/usr/bin/env python
+#!/bin/bash
 
-import os
-import re
-import pwd
-import sys
-import shlex
-from docopt import docopt
-from subprocess import check_call, check_output
+SCRIPT=${SCRIPT:-`realpath "$0"`}
+GID=${GID:-`id -g $USER`}
 
-USER, _, UID, GID, _, HOME, SHELL = pwd.getpwuid(os.getuid())
+NERF=false
+IMAGE=
+PASSTHRU=""
 
-def rearrange(lead, short, comma, long_, default, gap, text):
-    assert long_
-    if not default:
-        default = '""'
-    else:
-        gap += '  '
-    default = '[default: %(default)s]' % locals()
-    if not short:
-        short = ''
-        comma = ''
-    return '%(lead)s%(short)s%(comma)s%(long_)s%(gap)s%(default)s %(text)s\n' % locals()
+SUDOERS="/etc/sudoers"
+PASSWD="/etc/passwd"
 
-def gen_doc():
-    doc = '''
-Usage: drun [options] <image> [--] [<command> <args>...]
+usage() {
+    echo "usage"
+    docker run --help
+    echo "*********************************************************************"
+    echo "usage: dock [-h] [--help, --nerf] image"
+    exit 1
+}
 
-Options:
-  --nerf                      [default: false] Nerf it
-'''
-    regex = re.compile('( +)(-[A-Za-z])?(, +)?(--[A-Za-z0-9\-]+)=([A-Za-z0-9\-\[\]]+)?( +)(.*)')
-    usage = check_output('docker run --help', shell=True)
-    for line in usage.split('\n'):
-        match = regex.search(line)
-        if match:
-            doc += rearrange(*match.groups())
-    return doc
+container() {
+    groupadd --gid $GID $USER
+    useradd --uid $UID --gid $GID --shell $SHELL --no-create-home $USER
+    usermod -aG sudo $USER
+    echo -e "\n%sudo   ALL=(ALL) NOPASSWD: ALL\n" > /etc/sudoers
+    exec su - $USER
+}
 
-def collect_options(args):
-    return [k for k, v in args.iteritems() if v and k.startswith('-')]
+hostmachine() {
+    volumes=()
+    volumes+=($SCRIPT:$SCRIPT)
+    volumes+=($HOME:$HOME)
+    volumes=$(printf " -v %s" "${volumes[@]}")
+    env="env PATH=$PATH HOME=$HOME USER=$USER UID=$UID GID=$GID SHELL=$SHELL SCRIPT=$SCRIPT"
+    cmd="docker run $volumes $PASSTHRU -it $IMAGE $env $SCRIPT DOCKER_CONTAINER"
+    if $NERF; then
+        echo $cmd
+    else
+        exec $cmd
+    fi
+}
 
-def fixup_args(args):
-    del args['--']
-    args['options'] = collect_options(args)
-    return args
+for item in "$@"; do
+    case $item in
+        -h|--help)
+            usage
+        ;;
+        --nerf)
+            NERF=true
+        ;;
+        *)
+            if [ -n "$IMAGE" ]; then
+                PASSTHRU="$PASSTHRU $IMAGE"
+            fi
+            IMAGE=$item
+            shift 2
+        ;;
+    esac
+done
 
-def shell_escape(arg):
-    return "'%s'" % str(arg).replace("'", "'\\''")
+if [ -z "$IMAGE" ]; then
+    echo "missing value for IMAGE"
+    usage
+fi
 
-def docker_args(args):
-    return ['-v', '%(HOME)s:%(HOME)s' % globals()] + collect_options(args) + [args['<image>']]
-
-def container_args(args):
-    groupadd = ' '.join(map(shell_escape, [
-        'groupadd',
-        '--gid', GID,
-        USER,
-    ]))
-    useradd = ' '.join(map(shell_escape, [
-        'useradd',
-        '--uid', UID,
-        '--gid', GID,
-        '--shell', SHELL,
-        #'--home-dir', HOME,
-        '--no-create-home',
-        USER
-    ]))
-    su_user = ' '.join(map(shell_escape, [
-        'exec',
-        'su',
-        '-',
-        USER,
-    ]))
-    binbash = ' '.join(map(shell_escape, [
-        'exec /bin/bash'
-    ]))
-    return [
-        '/bin/bash', '-c',
-        '%(groupadd)s && %(useradd)s && %(su_user)s' % locals(),
-    ]
-
-def main():
-    doc = gen_doc()
-    args = docopt(doc)
-    args = fixup_args(args)
-    cmd = [
-        'docker',
-        'docker',
-        'run'
-    ] + docker_args(args) + container_args(args)
-    if args.get('--nerf'):
-        import pprint
-        pprint.pprint(cmd)
-        return
-    os.execlp(*cmd)
-
-if __name__ == '__main__':
-    main()
+if [ "$IMAGE" == "DOCKER_CONTAINER" ]; then
+    container
+else
+    hostmachine
+fi
