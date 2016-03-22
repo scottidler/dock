@@ -19,10 +19,13 @@ usage() {
 }
 
 container() {
-    groupadd --gid $GID $USER
-    useradd --uid $UID --gid $GID --shell $SHELL --no-create-home $USER
-    usermod -aG sudo $USER
-    echo -e "\n%sudo   ALL=(ALL) NOPASSWD: ALL\n" > /etc/sudoers
+    exists=false
+    getent passwd $USER > /dev/null 2>&1 && exists=true
+    if ! $exists; then
+        groupadd --gid $GID $USER
+        useradd --uid $UID --gid $GID --shell $SHELL --no-create-home $USER
+        echo -e "\n$USER   ALL=(ALL) NOPASSWD: ALL\n" > /etc/sudoers
+    fi
     exec su - $USER
 }
 
