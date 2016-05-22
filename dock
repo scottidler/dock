@@ -30,12 +30,13 @@ container() {
 }
 
 hostmachine() {
+    hostname="$HOSTNAME-$IMAGE"
     volumes=()
     volumes+=($SCRIPT:$SCRIPT)
     volumes+=($HOME:$HOME)
     volumes=$(printf " -v %s" "${volumes[@]}")
-    env="env PATH=$PATH HOME=$HOME USER=$USER UID=$UID GID=$GID SHELL=$SHELL SCRIPT=$SCRIPT"
-    cmd="docker run $volumes $PASSTHRU -it $IMAGE $env $SCRIPT DOCKER_CONTAINER"
+    env="env HOME=$HOME USER=$USER UID=$UID GID=$GID SHELL=$SHELL SCRIPT=$SCRIPT"
+    cmd="docker run -h $hostname $volumes $PASSTHRU -it $IMAGE $env $SCRIPT DOCKER_CONTAINER"
     if $NERF; then
         echo $cmd
     else
