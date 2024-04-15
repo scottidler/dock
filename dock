@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-SCRIPT=${SCRIPT:-`realpath "$0"`}
-GID=${GID:-`id -g $USER`}
+SCRIPT=${SCRIPT:-$(realpath "$0")}
+GID=${GID:-$(id -g $USER)}
 
 NERF=false
 IMAGE=
@@ -11,64 +11,64 @@ SUDOERS="/etc/sudoers"
 PASSWD="/etc/passwd"
 
 usage() {
-    echo "usage"
-    docker run --help
-    echo "*********************************************************************"
-    echo "usage: dock [-h] [--help, --nerf] image"
-    exit 1
+	echo "usage"
+	docker run --help
+	echo "*********************************************************************"
+	echo "usage: dock [-h] [--help, --nerf] image"
+	exit 1
 }
 
 container() {
-    exists=false
-    getent passwd $USER > /dev/null 2>&1 && exists=true
-    if ! $exists; then
-        groupadd --gid $GID $USER
-        useradd --uid $UID --gid $GID --shell $SHELL --no-create-home $USER
-        echo -e "\n$USER   ALL=(ALL) NOPASSWD: ALL\n" > /etc/sudoers
-    fi
-    exec su - $USER
+	exists=false
+	getent passwd $USER >/dev/null 2>&1 && exists=true
+	if ! $exists; then
+		groupadd --gid $GID $USER
+		useradd --uid $UID --gid $GID --shell $SHELL --no-create-home $USER
+		echo -e "\n$USER   ALL=(ALL) NOPASSWD: ALL\n" >/etc/sudoers
+	fi
+	exec su - $USER
 }
 
 hostmachine() {
-    hostname="$HOSTNAME-$IMAGE"
-    volumes=()
-    volumes+=($SCRIPT:$SCRIPT)
-    volumes+=($HOME:$HOME)
-    volumes=$(printf " -v %s" "${volumes[@]}")
-    env="env HOME=$HOME USER=$USER UID=$UID GID=$GID SHELL=$SHELL SCRIPT=$SCRIPT"
-    cmd="docker run -h $hostname $volumes $PASSTHRU -it $IMAGE $env $SCRIPT DOCKER_CONTAINER"
-    if $NERF; then
-        echo $cmd
-    else
-        exec $cmd
-    fi
+	hostname="$HOSTNAME-$IMAGE"
+	volumes=()
+	volumes+=($SCRIPT:$SCRIPT)
+	volumes+=($HOME:$HOME)
+	volumes=$(printf " -v %s" "${volumes[@]}")
+	env="env HOME=$HOME USER=$USER UID=$UID GID=$GID SHELL=$SHELL SCRIPT=$SCRIPT"
+	cmd="docker run -h $hostname $volumes $PASSTHRU -it $IMAGE $env $SCRIPT DOCKER_CONTAINER"
+	if $NERF; then
+		echo $cmd
+	else
+		exec $cmd
+	fi
 }
 
 for item in "$@"; do
-    case $item in
-        -h|--help)
-            usage
-        ;;
-        --nerf)
-            NERF=true
-        ;;
-        *)
-            if [ -n "$IMAGE" ]; then
-                PASSTHRU="$PASSTHRU $IMAGE"
-            fi
-            IMAGE=$item
-            shift 2
-        ;;
-    esac
+	case $item in
+	-h | --help)
+		usage
+		;;
+	--nerf)
+		NERF=true
+		;;
+	*)
+		if [ -n "$IMAGE" ]; then
+			PASSTHRU="$PASSTHRU $IMAGE"
+		fi
+		IMAGE=$item
+		shift 2
+		;;
+	esac
 done
 
 if [ -z "$IMAGE" ]; then
-    echo "missing value for IMAGE"
-    usage
+	echo "missing value for IMAGE"
+	usage
 fi
 
 if [ "$IMAGE" == "DOCKER_CONTAINER" ]; then
-    container
+	container
 else
-    hostmachine
+	hostmachine
 fi
